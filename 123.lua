@@ -675,7 +675,9 @@ local function buildReport()
         ("🔫 Оружие: %s"):format(#guns>0 and table.concat(guns, ", ") or "нет"),
         ("🍉 Фрукты: %s"):format(#fruits>0 and table.concat(fruits, ", ") or "нет"),
         ("👑 Аксессуары: %s"):format(#accs>0 and table.concat(accs, ", ") or "нет"),
-        ("🛠 Материалы: %s"):format(#mats>0 and table.concat(mats, ", ") or "нет")
+        ("🛠 Материалы: %s"):format(#mats>0 and table.concat(mats, ", ") or "нет"),
+        "",
+        "📤 Данные готовы к отправке на сервер!"
     }
     
     -- Сохраняем последние данные для отправки
@@ -690,6 +692,37 @@ local function buildReport()
     }
     
     return table.concat(lines, "\n")
+end
+
+-- Функция для обновления отчета после отправки
+local function updateReportAfterSend(success, message)
+    local currentReport = box.Text
+    local lines = {}
+    
+    -- Разбиваем текущий отчет на строки
+    for line in currentReport:gmatch("[^\n]+") do
+        table.insert(lines, line)
+    end
+    
+    -- Убираем старые статусы отправки
+    local cleanLines = {}
+    for _, line in ipairs(lines) do
+        if not line:find("📤") and not line:find("✅") and not line:find("❌") then
+            table.insert(cleanLines, line)
+        end
+    end
+    
+    -- Добавляем новый статус
+    table.insert(cleanLines, "")
+    if success then
+        table.insert(cleanLines, "✅ Данные успешно отправлены на сервер!")
+        table.insert(cleanLines, "🌐 Смотрите на: http://194.59.186.230:3000")
+    else
+        table.insert(cleanLines, "❌ Ошибка отправки: " .. message)
+        table.insert(cleanLines, "🔄 Попробуйте ещё раз")
+    end
+    
+    box.Text = table.concat(cleanLines, "\n")
 end
 
 -- Обработчик кнопки отправки
@@ -723,6 +756,7 @@ sendButton.MouseButton1Click:Connect(function()
         sendButton.Text = "📤 Отправить"
         statusLabel.Text = "Готов к отправке"
         statusLabel.TextColor3 = Color3.new(1, 1, 1)
+        updateReportAfterSend(true, result.message)
     else
         statusLabel.Text = "❌ " .. result.message
         statusLabel.TextColor3 = Color3.new(1, 0, 0) -- Красный цвет
@@ -735,6 +769,7 @@ sendButton.MouseButton1Click:Connect(function()
         sendButton.Text = "📤 Отправить"
         statusLabel.Text = "Готов к отправке"
         statusLabel.TextColor3 = Color3.new(1, 1, 1)
+        updateReportAfterSend(false, result.message)
     end
 end)
 
