@@ -92,11 +92,47 @@ local function sendDataToServer(data)
     end
 end
 
+-- === ВИЗУАЛЬНЫЙ ИНДИКАТОР ОЖИДАНИЯ ===
+local waitingLabel = nil
+local function showWaitingLabel(levelsLeft)
+    if waitingLabel == nil then
+        waitingLabel = Instance.new("ScreenGui", player.PlayerGui)
+        waitingLabel.Name = "WaitingLevelGui"
+        local label = Instance.new("TextLabel", waitingLabel)
+        label.Name = "WaitingLabel"
+        label.Size = UDim2.new(0, 420, 0, 38)
+        label.Position = UDim2.new(0.5, -210, 0.35, 0) -- по центру, чуть выше середины
+        label.BackgroundTransparency = 0.4
+        label.BackgroundColor3 = Color3.new(0, 0, 0)
+        label.TextColor3 = Color3.new(1, 1, 0.5)
+        label.TextStrokeTransparency = 0.7
+        label.Font = Enum.Font.SourceSansBold
+        label.TextSize = 22
+        label.TextXAlignment = Enum.TextXAlignment.Center
+        label.TextYAlignment = Enum.TextYAlignment.Center
+    end
+    local label = waitingLabel:FindFirstChild("WaitingLabel")
+    if label then
+        if levelsLeft > 0 then
+            label.Text = string.format("Скрипт активен в фоне. До старта: %d уровней", levelsLeft)
+        else
+            label.Text = "Скрипт активен в фоне. До старта: 0 уровней"
+        end
+    end
+end
+local function hideWaitingLabel()
+    if waitingLabel then
+        waitingLabel:Destroy()
+        waitingLabel = nil
+    end
+end
+
 -- === АВТОМАТИЧЕСКИЙ ЗАПУСК ПО ДОСТИЖЕНИЮ 2650 ЛВЛ ===
 local PANEL_SHOWN = false
 local function showPanelAndScan()
     if PANEL_SHOWN then return end
     PANEL_SHOWN = true
+    hideWaitingLabel() -- Скрываем индикатор ожидания
     -- Удаляем старое окно, если есть
     local old = player.PlayerGui:FindFirstChild("StatsGui")
     if old then old:Destroy() end
@@ -209,10 +245,15 @@ local function watchLevelAndRun()
         showPanelAndScan()
         return
     end
+    -- Показываем индикатор ожидания
+    showWaitingLabel(2650 - (tonumber(lvlO.Value) or 0))
     -- Подписываемся на изменение уровня
     lvlO:GetPropertyChangedSignal("Value"):Connect(function()
-        if tonumber(lvlO.Value) and tonumber(lvlO.Value) >= 2650 then
+        local currentLevel = tonumber(lvlO.Value) or 0
+        if currentLevel >= 2650 then
             showPanelAndScan()
+        else
+            showWaitingLabel(2650 - currentLevel)
         end
     end)
 end
