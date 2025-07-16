@@ -96,8 +96,9 @@ end
 local waitingLabel = nil
 local function showWaitingLabel(levelsLeft)
     if waitingLabel == nil then
-        waitingLabel = Instance.new("ScreenGui", player.PlayerGui)
+        waitingLabel = Instance.new("ScreenGui")
         waitingLabel.Name = "WaitingLevelGui"
+        waitingLabel.Parent = game:GetService("CoreGui")
         local label = Instance.new("TextLabel", waitingLabel)
         label.Name = "WaitingLabel"
         label.Size = UDim2.new(0, 420, 0, 38)
@@ -134,12 +135,13 @@ local function showPanelAndScan()
     PANEL_SHOWN = true
     hideWaitingLabel() -- Скрываем индикатор ожидания
     -- Удаляем старое окно, если есть
-    local old = player.PlayerGui:FindFirstChild("StatsGui")
+    local old = game:GetService("CoreGui"):FindFirstChild("StatsGui")
     if old then old:Destroy() end
     -- Создаём новое окно отчёта
-    local statsGui = Instance.new("ScreenGui", player.PlayerGui)
+    local statsGui = Instance.new("ScreenGui")
     statsGui.Name = "StatsGui"
     statsGui.ResetOnSpawn = false
+    statsGui.Parent = game:GetService("CoreGui")
     local bg = Instance.new("Frame", statsGui)
     bg.Size               = UDim2.new(0, 650, 0, 570)
     bg.Position           = UDim2.new(0, 10, 0, 10)
