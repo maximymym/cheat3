@@ -773,5 +773,94 @@ sendButton.MouseButton1Click:Connect(function()
     end
 end)
 
+-- НОВОЕ: Автоматический мониторинг уровня и отправка данных при достижении 2650 уровня
+local TARGET_LEVEL = 2650
+local autoSentAlready = false -- Флаг, чтобы не отправлять повторно
+
+local function autoCollectAndSend()
+    statusLabel.Text = "🎯 Достигнут уровень " .. TARGET_LEVEL .. "! Собираю данные..."
+    statusLabel.TextColor3 = Color3.new(0, 1, 1) -- Голубой цвет
+    
+    -- Собираем данные инвентаря
+    box.Text = "🎯 АВТОМАТИЧЕСКИЙ СБОР ПРИ УРОВНЕ " .. TARGET_LEVEL .. "\n\nСобираю данные инвентаря..."
+    
+    -- Обновляем отчет
+    box.Text = buildReport()
+    
+    statusLabel.Text = "⏱ Отправка через 10 секунд..."
+    
+    -- Обновляем текст в окне
+    local currentReport = box.Text
+    box.Text = currentReport .. "\n\n⏱ Автоматическая отправка через 10 секунд..."
+    
+    -- Ждем 10 секунд с обратным отсчетом
+    for i = 10, 1, -1 do
+        statusLabel.Text = "⏱ Отправка через " .. i .. " сек..."
+        task.wait(1)
+    end
+    
+    -- Отправляем данные
+    statusLabel.Text = "📤 Автоматическая отправка данных..."
+    statusLabel.TextColor3 = Color3.new(1, 1, 0) -- Желтый цвет
+    
+    if debugInfo.lastInventoryData then
+        local result = sendDataToServer(debugInfo.lastInventoryData)
+        
+        if result.success then
+            statusLabel.Text = "✅ Автоматическая отправка успешна!"
+            statusLabel.TextColor3 = Color3.new(0, 1, 0) -- Зеленый цвет
+            updateReportAfterSend(true, "Автоматическая отправка при достижении уровня " .. TARGET_LEVEL)
+        else
+            statusLabel.Text = "❌ Ошибка автоматической отправки"
+            statusLabel.TextColor3 = Color3.new(1, 0, 0) -- Красный цвет
+            updateReportAfterSend(false, result.message)
+        end
+    else
+        statusLabel.Text = "❌ Нет данных для автоматической отправки"
+        statusLabel.TextColor3 = Color3.new(1, 0, 0)
+    end
+    
+    autoSentAlready = true
+end
+
+local function monitorLevel()
+    -- Ждем появления данных уровня
+    local data = waitForChild(player, "Data", 30)
+    if not data then
+        statusLabel.Text = "⚠ Не удалось найти данные игрока"
+        return
+    end
+    
+    local levelObj = data:FindFirstChild("Level")
+    if not levelObj then
+        statusLabel.Text = "⚠ Не удалось найти объект уровня"
+        return
+    end
+    
+    -- Проверяем текущий уровень при запуске
+    local currentLevel = levelObj.Value
+    if currentLevel >= TARGET_LEVEL and not autoSentAlready then
+        statusLabel.Text = "🎯 Уровень " .. TARGET_LEVEL .. " уже достигнут! Запуск автосбора..."
+        task.spawn(autoCollectAndSend)
+        return
+    end
+    
+    -- Мониторим изменения уровня
+    levelObj.Changed:Connect(function(newLevel)
+        if newLevel >= TARGET_LEVEL and not autoSentAlready then
+            statusLabel.Text = "🎯 Достигнут уровень " .. TARGET_LEVEL .. "!"
+            task.spawn(autoCollectAndSend)
+        end
+    end)
+    
+    -- Показываем статус мониторинга
+    if currentLevel < TARGET_LEVEL then
+        statusLabel.Text = string.format("👀 Мониторинг уровня: %d/%d", currentLevel, TARGET_LEVEL)
+    end
+end
+
+-- Запускаем мониторинг уровня в отдельном потоке
+task.spawn(monitorLevel)
+
 -- Вывод и копирование в GUI
 box.Text = buildReport() 
