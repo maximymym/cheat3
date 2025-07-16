@@ -12,6 +12,275 @@ local player            = Players.LocalPlayer
 -- Настройки сервера (IP сервера)
 local SERVER_URL = "http://194.59.186.230:3000/api/data"
 
+-- === АВТОМАТИЧЕСКИЙ ЗАПУСК ПО ДОСТИЖЕНИЮ 2650 ЛВЛ ===
+local PANEL_SHOWN = false
+
+-- Создаём индикатор уровня
+local function createLevelIndicator()
+    local indicatorGui = Instance.new("ScreenGui", player.PlayerGui)
+    indicatorGui.Name = "LevelIndicatorGui"
+    indicatorGui.ResetOnSpawn = false
+    
+    local indicator = Instance.new("Frame", indicatorGui)
+    indicator.Size = UDim2.new(0, 300, 0, 60)
+    indicator.Position = UDim2.new(0.5, -150, 0.5, -30) -- Центр экрана
+    indicator.BackgroundColor3 = Color3.new(0, 0, 0)
+    indicator.BackgroundTransparency = 0.3
+    indicator.BorderSizePixel = 0
+    
+    -- Закругляем углы
+    local corner = Instance.new("UICorner", indicator)
+    corner.CornerRadius = UDim.new(0, 8)
+    
+    local titleLabel = Instance.new("TextLabel", indicator)
+    titleLabel.Size = UDim2.new(1, 0, 0, 20)
+    titleLabel.Position = UDim2.new(0, 0, 0, 5)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "🔄 Автоскрипт активен"
+    titleLabel.TextColor3 = Color3.new(0, 1, 0) -- Зеленый
+    titleLabel.Font = Enum.Font.SourceSansBold
+    titleLabel.TextSize = 12
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Center
+    
+    local levelLabel = Instance.new("TextLabel", indicator)
+    levelLabel.Size = UDim2.new(1, 0, 0, 35)
+    levelLabel.Position = UDim2.new(0, 0, 0, 25)
+    levelLabel.BackgroundTransparency = 1
+    levelLabel.Text = "Загрузка..."
+    levelLabel.TextColor3 = Color3.new(1, 1, 1)
+    levelLabel.Font = Enum.Font.SourceSans
+    levelLabel.TextSize = 11
+    levelLabel.TextXAlignment = Enum.TextXAlignment.Center
+    levelLabel.TextWrapped = true
+    
+    return indicatorGui, levelLabel
+end
+
+-- Обновляем индикатор уровня
+local function updateLevelIndicator(levelLabel, currentLevel)
+    if currentLevel and tonumber(currentLevel) then
+        local level = tonumber(currentLevel)
+        local needed = 2650
+        
+        if level >= needed then
+            levelLabel.Text = string.format("🎯 Уровень: %d\n✅ Запуск скрипта!", level)
+            levelLabel.TextColor3 = Color3.new(0, 1, 0) -- Зеленый
+        else
+            local remaining = needed - level
+            levelLabel.Text = string.format("📊 Уровень: %d / %d\n⏳ Осталось: %d лвл", level, needed, remaining)
+            levelLabel.TextColor3 = Color3.new(1, 1, 0) -- Желтый
+        end
+    else
+        levelLabel.Text = "❌ Не удалось получить уровень"
+        levelLabel.TextColor3 = Color3.new(1, 0, 0) -- Красный
+    end
+end
+
+-- Ждём появления объекта
+local function waitForChild(parent, name, timeout)
+    timeout = timeout or 10
+    local t = 0
+    while t < timeout and not parent:FindFirstChild(name) do
+        t = t + task.wait()
+    end
+    return parent:FindFirstChild(name)
+end
+
+local function showPanelAndScan()
+    if PANEL_SHOWN then return end
+    PANEL_SHOWN = true
+    
+    -- Удаляем индикатор уровня
+    local indicatorGui = player.PlayerGui:FindFirstChild("LevelIndicatorGui")
+    if indicatorGui then indicatorGui:Destroy() end
+    
+    -- Удаляем старое окно, если есть
+    local old = player.PlayerGui:FindFirstChild("StatsGui")
+    if old then old:Destroy() end
+    
+    -- Создаём новое окно отчёта
+    local statsGui = Instance.new("ScreenGui", player.PlayerGui)
+    statsGui.Name = "StatsGui"
+    statsGui.ResetOnSpawn = false
+    
+    local bg = Instance.new("Frame", statsGui)
+    bg.Size               = UDim2.new(0, 650, 0, 570)
+    bg.Position           = UDim2.new(0, 10, 0, 10)
+    bg.BackgroundColor3   = Color3.new(0, 0, 0)
+    bg.BackgroundTransparency = 0.6
+    bg.BorderSizePixel    = 0
+    
+    local sendButton = Instance.new("TextButton", bg)
+    sendButton.Size = UDim2.new(0, 120, 0, 30)
+    sendButton.Position = UDim2.new(0, 10, 0, 10)
+    sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
+    sendButton.TextColor3 = Color3.new(1, 1, 1)
+    sendButton.Text = "📤 Отправить"
+    sendButton.Font = Enum.Font.SourceSansBold
+    sendButton.TextSize = 14
+    sendButton.BorderSizePixel = 0
+    
+    local statusLabel = Instance.new("TextLabel", bg)
+    statusLabel.Size = UDim2.new(0, 500, 0, 30)
+    statusLabel.Position = UDim2.new(0, 140, 0, 10)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.TextColor3 = Color3.new(1, 1, 1)
+    statusLabel.Text = "Готов к отправке"
+    statusLabel.Font = Enum.Font.SourceSans
+    statusLabel.TextSize = 12
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local box = Instance.new("TextBox", bg)
+    box.Name             = "ReportBox"
+    box.Size             = UDim2.new(1, -20, 1, -60)
+    box.Position         = UDim2.new(0, 10, 0, 50)
+    box.BackgroundColor3 = Color3.new(1, 1, 1)
+    box.TextColor3       = Color3.new(0, 0, 0)
+    box.TextWrapped      = true
+    box.ClearTextOnFocus = false
+    box.TextEditable     = false
+    box.TextXAlignment   = Enum.TextXAlignment.Left
+    box.TextYAlignment   = Enum.TextYAlignment.Top
+    box.Text             = "Загружается..."
+    
+    -- Сканируем инвентарь и обновляем отчёт
+    box.Text = buildReport()
+    
+    -- Через 10 секунд отправляем на сервер
+    task.spawn(function()
+        task.wait(10)
+        if debugInfo.lastInventoryData then
+            local result = sendDataToServer(debugInfo.lastInventoryData)
+            if result.success then
+                statusLabel.Text = "✅ " .. result.message
+                statusLabel.TextColor3 = Color3.new(0, 1, 0)
+                sendButton.BackgroundColor3 = Color3.new(0, 1, 0)
+                sendButton.Text = "✅ Отправлено"
+            else
+                statusLabel.Text = "❌ " .. result.message
+                statusLabel.TextColor3 = Color3.new(1, 0, 0)
+                sendButton.BackgroundColor3 = Color3.new(1, 0, 0)
+                sendButton.Text = "❌ Ошибка"
+            end
+        end
+    end)
+    
+    -- Оставляем ручную отправку на всякий случай
+    sendButton.MouseButton1Click:Connect(function()
+        statusLabel.Text = "📤 Отправка данных..."
+        statusLabel.TextColor3 = Color3.new(1, 1, 0)
+        sendButton.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
+        sendButton.Text = "⏳ Отправка..."
+        
+        if not debugInfo.lastInventoryData then
+            statusLabel.Text = "❌ Нет данных для отправки! Обновите инвентарь."
+            statusLabel.TextColor3 = Color3.new(1, 0, 0)
+            sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
+            sendButton.Text = "📤 Отправить"
+            return
+        end
+        
+        local result = sendDataToServer(debugInfo.lastInventoryData)
+        if result.success then
+            statusLabel.Text = "✅ " .. result.message
+            statusLabel.TextColor3 = Color3.new(0, 1, 0)
+            sendButton.BackgroundColor3 = Color3.new(0, 1, 0)
+            sendButton.Text = "✅ Отправлено"
+            task.wait(3)
+            sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
+            sendButton.Text = "📤 Отправить"
+            statusLabel.Text = "Готов к отправке"
+            statusLabel.TextColor3 = Color3.new(1, 1, 1)
+        else
+            statusLabel.Text = "❌ " .. result.message
+            statusLabel.TextColor3 = Color3.new(1, 0, 0)
+            sendButton.BackgroundColor3 = Color3.new(1, 0, 0)
+            sendButton.Text = "❌ Ошибка"
+            task.wait(5)
+            sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
+            sendButton.Text = "📤 Отправить"
+            statusLabel.Text = "Готов к отправке"
+            statusLabel.TextColor3 = Color3.new(1, 1, 1)
+        end
+    end)
+end
+
+-- Следим за уровнем игрока
+local function watchLevelAndRun()
+    local data = waitForChild(player, "Data", 15)
+    if not data then 
+        -- Если не удалось получить данные, показываем индикатор с ошибкой
+        local indicatorGui, levelLabel = createLevelIndicator()
+        levelLabel.Text = "❌ Ошибка получения данных"
+        levelLabel.TextColor3 = Color3.new(1, 0, 0)
+        return 
+    end
+    
+    local lvlO = data:FindFirstChild("Level")
+    if not lvlO then 
+        -- Если не удалось найти уровень, показываем индикатор с ошибкой
+        local indicatorGui, levelLabel = createLevelIndicator()
+        levelLabel.Text = "❌ Уровень не найден"
+        levelLabel.TextColor3 = Color3.new(1, 0, 0)
+        return 
+    end
+    
+    -- Создаём индикатор уровня
+    local indicatorGui, levelLabel = createLevelIndicator()
+    
+    -- Обновляем индикатор с текущим уровнем
+    updateLevelIndicator(levelLabel, lvlO.Value)
+    
+    -- Если уже достигнут уровень, сразу запускаем через 2 секунды (чтобы пользователь увидел финальное сообщение)
+    if tonumber(lvlO.Value) and tonumber(lvlO.Value) >= 2650 then
+        task.wait(2)
+        showPanelAndScan()
+        return
+    end
+    
+    -- Подписываемся на изменение уровня
+    lvlO:GetPropertyChangedSignal("Value"):Connect(function()
+        updateLevelIndicator(levelLabel, lvlO.Value)
+        
+        if tonumber(lvlO.Value) and tonumber(lvlO.Value) >= 2650 then
+            -- Показываем финальное сообщение на 2 секунды, затем запускаем
+            task.wait(2)
+            showPanelAndScan()
+        end
+    end)
+end
+
+-- ЗАПУСКАЕМ ОТСЛЕЖИВАНИЕ УРОВНЯ СРАЗУ
+task.spawn(function()
+    -- Сначала создаем тестовый индикатор чтобы убедиться что GUI работает
+    local testGui = Instance.new("ScreenGui", player.PlayerGui)
+    testGui.Name = "TestGui"
+    testGui.ResetOnSpawn = false
+    
+    local testFrame = Instance.new("Frame", testGui)
+    testFrame.Size = UDim2.new(0, 200, 0, 50)
+    testFrame.Position = UDim2.new(0.5, -100, 0.5, -25) -- Центр экрана
+    testFrame.BackgroundColor3 = Color3.new(1, 0, 0) -- Красный фон
+    testFrame.BorderSizePixel = 0
+    
+    local testLabel = Instance.new("TextLabel", testFrame)
+    testLabel.Size = UDim2.new(1, 0, 1, 0)
+    testLabel.Position = UDim2.new(0, 0, 0, 0)
+    testLabel.BackgroundTransparency = 1
+    testLabel.Text = "🔧 ТЕСТ: Скрипт работает!"
+    testLabel.TextColor3 = Color3.new(1, 1, 1)
+    testLabel.Font = Enum.Font.SourceSansBold
+    testLabel.TextSize = 10
+    testLabel.TextXAlignment = Enum.TextXAlignment.Center
+    
+    -- Удаляем тестовый индикатор через 5 секунд
+    task.wait(5)
+    testGui:Destroy()
+    
+    -- Теперь запускаем основную логику
+    watchLevelAndRun()
+end)
+
 -- Событие открытия/закрытия инвентаря
 local toggleInv = ReplicatedStorage:WaitForChild("Events"):WaitForChild("ToggleInventoryWindow")
 
@@ -90,237 +359,6 @@ local function sendDataToServer(data)
         debugInfo.lastSendResult = errorResult
         return errorResult
     end
-end
-
--- === АВТОМАТИЧЕСКИЙ ЗАПУСК ПО ДОСТИЖЕНИЮ 2650 ЛВЛ ===
-local PANEL_SHOWN = false
-
--- Создаём индикатор уровня
-local function createLevelIndicator()
-    local indicatorGui = Instance.new("ScreenGui", player.PlayerGui)
-    indicatorGui.Name = "LevelIndicatorGui"
-    indicatorGui.ResetOnSpawn = false
-    
-    local indicator = Instance.new("Frame", indicatorGui)
-    indicator.Size = UDim2.new(0, 300, 0, 60)
-    indicator.Position = UDim2.new(1, -320, 0, 10) -- Правый верхний угол
-    indicator.BackgroundColor3 = Color3.new(0, 0, 0)
-    indicator.BackgroundTransparency = 0.3
-    indicator.BorderSizePixel = 0
-    
-    -- Закругляем углы
-    local corner = Instance.new("UICorner", indicator)
-    corner.CornerRadius = UDim.new(0, 8)
-    
-    local titleLabel = Instance.new("TextLabel", indicator)
-    titleLabel.Size = UDim2.new(1, 0, 0, 20)
-    titleLabel.Position = UDim2.new(0, 0, 0, 5)
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.Text = "🔄 Автоскрипт активен"
-    titleLabel.TextColor3 = Color3.new(0, 1, 0) -- Зеленый
-    titleLabel.Font = Enum.Font.SourceSansBold
-    titleLabel.TextSize = 12
-    titleLabel.TextXAlignment = Enum.TextXAlignment.Center
-    
-    local levelLabel = Instance.new("TextLabel", indicator)
-    levelLabel.Size = UDim2.new(1, 0, 0, 35)
-    levelLabel.Position = UDim2.new(0, 0, 0, 25)
-    levelLabel.BackgroundTransparency = 1
-    levelLabel.Text = "Загрузка..."
-    levelLabel.TextColor3 = Color3.new(1, 1, 1)
-    levelLabel.Font = Enum.Font.SourceSans
-    levelLabel.TextSize = 11
-    levelLabel.TextXAlignment = Enum.TextXAlignment.Center
-    levelLabel.TextWrapped = true
-    
-    return indicatorGui, levelLabel
-end
-
--- Обновляем индикатор уровня
-local function updateLevelIndicator(levelLabel, currentLevel)
-    if currentLevel and tonumber(currentLevel) then
-        local level = tonumber(currentLevel)
-        local needed = 2650
-        
-        if level >= needed then
-            levelLabel.Text = string.format("🎯 Уровень: %d\n✅ Запуск скрипта!", level)
-            levelLabel.TextColor3 = Color3.new(0, 1, 0) -- Зеленый
-        else
-            local remaining = needed - level
-            levelLabel.Text = string.format("📊 Уровень: %d / %d\n⏳ Осталось: %d лвл", level, needed, remaining)
-            levelLabel.TextColor3 = Color3.new(1, 1, 0) -- Желтый
-        end
-    else
-        levelLabel.Text = "❌ Не удалось получить уровень"
-        levelLabel.TextColor3 = Color3.new(1, 0, 0) -- Красный
-    end
-end
-
-local function showPanelAndScan()
-    if PANEL_SHOWN then return end
-    PANEL_SHOWN = true
-    
-    -- Удаляем индикатор уровня
-    local indicatorGui = player.PlayerGui:FindFirstChild("LevelIndicatorGui")
-    if indicatorGui then indicatorGui:Destroy() end
-    
-    -- Удаляем старое окно, если есть
-    local old = player.PlayerGui:FindFirstChild("StatsGui")
-    if old then old:Destroy() end
-    -- Создаём новое окно отчёта
-    local statsGui = Instance.new("ScreenGui", player.PlayerGui)
-    statsGui.Name = "StatsGui"
-    statsGui.ResetOnSpawn = false
-    local bg = Instance.new("Frame", statsGui)
-    bg.Size               = UDim2.new(0, 650, 0, 570)
-    bg.Position           = UDim2.new(0, 10, 0, 10)
-    bg.BackgroundColor3   = Color3.new(0, 0, 0)
-    bg.BackgroundTransparency = 0.6
-    bg.BorderSizePixel    = 0
-    local sendButton = Instance.new("TextButton", bg)
-    sendButton.Size = UDim2.new(0, 120, 0, 30)
-    sendButton.Position = UDim2.new(0, 10, 0, 10)
-    sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
-    sendButton.TextColor3 = Color3.new(1, 1, 1)
-    sendButton.Text = "📤 Отправить"
-    sendButton.Font = Enum.Font.SourceSansBold
-    sendButton.TextSize = 14
-    sendButton.BorderSizePixel = 0
-    local statusLabel = Instance.new("TextLabel", bg)
-    statusLabel.Size = UDim2.new(0, 500, 0, 30)
-    statusLabel.Position = UDim2.new(0, 140, 0, 10)
-    statusLabel.BackgroundTransparency = 1
-    statusLabel.TextColor3 = Color3.new(1, 1, 1)
-    statusLabel.Text = "Готов к отправке"
-    statusLabel.Font = Enum.Font.SourceSans
-    statusLabel.TextSize = 12
-    statusLabel.TextXAlignment = Enum.TextXAlignment.Left
-    local box = Instance.new("TextBox", bg)
-    box.Name             = "ReportBox"
-    box.Size             = UDim2.new(1, -20, 1, -60)
-    box.Position         = UDim2.new(0, 10, 0, 50)
-    box.BackgroundColor3 = Color3.new(1, 1, 1)
-    box.TextColor3       = Color3.new(0, 0, 0)
-    box.TextWrapped      = true
-    box.ClearTextOnFocus = false
-    box.TextEditable     = false
-    box.TextXAlignment   = Enum.TextXAlignment.Left
-    box.TextYAlignment   = Enum.TextYAlignment.Top
-    box.Text             = "Загружается..."
-    -- Сканируем инвентарь и обновляем отчёт
-    box.Text = buildReport()
-    -- Через 10 секунд отправляем на сервер
-    task.spawn(function()
-        task.wait(10)
-        if debugInfo.lastInventoryData then
-            local result = sendDataToServer(debugInfo.lastInventoryData)
-            if result.success then
-                statusLabel.Text = "✅ " .. result.message
-                statusLabel.TextColor3 = Color3.new(0, 1, 0)
-                sendButton.BackgroundColor3 = Color3.new(0, 1, 0)
-                sendButton.Text = "✅ Отправлено"
-            else
-                statusLabel.Text = "❌ " .. result.message
-                statusLabel.TextColor3 = Color3.new(1, 0, 0)
-                sendButton.BackgroundColor3 = Color3.new(1, 0, 0)
-                sendButton.Text = "❌ Ошибка"
-            end
-        end
-    end)
-    -- Оставляем ручную отправку на всякий случай
-    sendButton.MouseButton1Click:Connect(function()
-        statusLabel.Text = "📤 Отправка данных..."
-        statusLabel.TextColor3 = Color3.new(1, 1, 0)
-        sendButton.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
-        sendButton.Text = "⏳ Отправка..."
-        if not debugInfo.lastInventoryData then
-            statusLabel.Text = "❌ Нет данных для отправки! Обновите инвентарь."
-            statusLabel.TextColor3 = Color3.new(1, 0, 0)
-            sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
-            sendButton.Text = "📤 Отправить"
-            return
-        end
-        local result = sendDataToServer(debugInfo.lastInventoryData)
-        if result.success then
-            statusLabel.Text = "✅ " .. result.message
-            statusLabel.TextColor3 = Color3.new(0, 1, 0)
-            sendButton.BackgroundColor3 = Color3.new(0, 1, 0)
-            sendButton.Text = "✅ Отправлено"
-            task.wait(3)
-            sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
-            sendButton.Text = "📤 Отправить"
-            statusLabel.Text = "Готов к отправке"
-            statusLabel.TextColor3 = Color3.new(1, 1, 1)
-        else
-            statusLabel.Text = "❌ " .. result.message
-            statusLabel.TextColor3 = Color3.new(1, 0, 0)
-            sendButton.BackgroundColor3 = Color3.new(1, 0, 0)
-            sendButton.Text = "❌ Ошибка"
-            task.wait(5)
-            sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
-            sendButton.Text = "📤 Отправить"
-            statusLabel.Text = "Готов к отправке"
-            statusLabel.TextColor3 = Color3.new(1, 1, 1)
-        end
-    end)
-end
-
--- Следим за уровнем игрока
-local function watchLevelAndRun()
-    local data = waitForChild(player, "Data", 15)
-    if not data then 
-        -- Если не удалось получить данные, показываем индикатор с ошибкой
-        local indicatorGui, levelLabel = createLevelIndicator()
-        levelLabel.Text = "❌ Ошибка получения данных"
-        levelLabel.TextColor3 = Color3.new(1, 0, 0)
-        return 
-    end
-    
-    local lvlO = data:FindFirstChild("Level")
-    if not lvlO then 
-        -- Если не удалось найти уровень, показываем индикатор с ошибкой
-        local indicatorGui, levelLabel = createLevelIndicator()
-        levelLabel.Text = "❌ Уровень не найден"
-        levelLabel.TextColor3 = Color3.new(1, 0, 0)
-        return 
-    end
-    
-    -- Создаём индикатор уровня
-    local indicatorGui, levelLabel = createLevelIndicator()
-    
-    -- Обновляем индикатор с текущим уровнем
-    updateLevelIndicator(levelLabel, lvlO.Value)
-    
-    -- Если уже достигнут уровень, сразу запускаем через 2 секунды (чтобы пользователь увидел финальное сообщение)
-    if tonumber(lvlO.Value) and tonumber(lvlO.Value) >= 2650 then
-        task.wait(2)
-        showPanelAndScan()
-        return
-    end
-    
-    -- Подписываемся на изменение уровня
-    lvlO:GetPropertyChangedSignal("Value"):Connect(function()
-        updateLevelIndicator(levelLabel, lvlO.Value)
-        
-        if tonumber(lvlO.Value) and tonumber(lvlO.Value) >= 2650 then
-            -- Показываем финальное сообщение на 2 секунды, затем запускаем
-            task.wait(2)
-            showPanelAndScan()
-        end
-    end)
-end
-
--- Запускаем отслеживание уровня
-watchLevelAndRun()
-
--- Ждём появления объекта
-local function waitForChild(parent, name, timeout)
-    timeout = timeout or 10
-    local t = 0
-    while t < timeout and not parent:FindFirstChild(name) do
-        t = t + task.wait()
-    end
-    return parent:FindFirstChild(name)
 end
 
 -- Функция для дебаг-вывода структуры объекта
