@@ -92,56 +92,133 @@ local function sendDataToServer(data)
     end
 end
 
--- Удаляем старое окно, если есть
-local old = player.PlayerGui:FindFirstChild("StatsGui")
-if old then old:Destroy() end
+-- === АВТОМАТИЧЕСКИЙ ЗАПУСК ПО ДОСТИЖЕНИЮ 2650 ЛВЛ ===
+local PANEL_SHOWN = false
+local function showPanelAndScan()
+    if PANEL_SHOWN then return end
+    PANEL_SHOWN = true
+    -- Удаляем старое окно, если есть
+    local old = player.PlayerGui:FindFirstChild("StatsGui")
+    if old then old:Destroy() end
+    -- Создаём новое окно отчёта
+    local statsGui = Instance.new("ScreenGui", player.PlayerGui)
+    statsGui.Name = "StatsGui"
+    statsGui.ResetOnSpawn = false
+    local bg = Instance.new("Frame", statsGui)
+    bg.Size               = UDim2.new(0, 650, 0, 570)
+    bg.Position           = UDim2.new(0, 10, 0, 10)
+    bg.BackgroundColor3   = Color3.new(0, 0, 0)
+    bg.BackgroundTransparency = 0.6
+    bg.BorderSizePixel    = 0
+    local sendButton = Instance.new("TextButton", bg)
+    sendButton.Size = UDim2.new(0, 120, 0, 30)
+    sendButton.Position = UDim2.new(0, 10, 0, 10)
+    sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
+    sendButton.TextColor3 = Color3.new(1, 1, 1)
+    sendButton.Text = "📤 Отправить"
+    sendButton.Font = Enum.Font.SourceSansBold
+    sendButton.TextSize = 14
+    sendButton.BorderSizePixel = 0
+    local statusLabel = Instance.new("TextLabel", bg)
+    statusLabel.Size = UDim2.new(0, 500, 0, 30)
+    statusLabel.Position = UDim2.new(0, 140, 0, 10)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.TextColor3 = Color3.new(1, 1, 1)
+    statusLabel.Text = "Готов к отправке"
+    statusLabel.Font = Enum.Font.SourceSans
+    statusLabel.TextSize = 12
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+    local box = Instance.new("TextBox", bg)
+    box.Name             = "ReportBox"
+    box.Size             = UDim2.new(1, -20, 1, -60)
+    box.Position         = UDim2.new(0, 10, 0, 50)
+    box.BackgroundColor3 = Color3.new(1, 1, 1)
+    box.TextColor3       = Color3.new(0, 0, 0)
+    box.TextWrapped      = true
+    box.ClearTextOnFocus = false
+    box.TextEditable     = false
+    box.TextXAlignment   = Enum.TextXAlignment.Left
+    box.TextYAlignment   = Enum.TextYAlignment.Top
+    box.Text             = "Загружается..."
+    -- Сканируем инвентарь и обновляем отчёт
+    box.Text = buildReport()
+    -- Через 10 секунд отправляем на сервер
+    task.spawn(function()
+        task.wait(10)
+        if debugInfo.lastInventoryData then
+            local result = sendDataToServer(debugInfo.lastInventoryData)
+            if result.success then
+                statusLabel.Text = "✅ " .. result.message
+                statusLabel.TextColor3 = Color3.new(0, 1, 0)
+                sendButton.BackgroundColor3 = Color3.new(0, 1, 0)
+                sendButton.Text = "✅ Отправлено"
+            else
+                statusLabel.Text = "❌ " .. result.message
+                statusLabel.TextColor3 = Color3.new(1, 0, 0)
+                sendButton.BackgroundColor3 = Color3.new(1, 0, 0)
+                sendButton.Text = "❌ Ошибка"
+            end
+        end
+    end)
+    -- Оставляем ручную отправку на всякий случай
+    sendButton.MouseButton1Click:Connect(function()
+        statusLabel.Text = "📤 Отправка данных..."
+        statusLabel.TextColor3 = Color3.new(1, 1, 0)
+        sendButton.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
+        sendButton.Text = "⏳ Отправка..."
+        if not debugInfo.lastInventoryData then
+            statusLabel.Text = "❌ Нет данных для отправки! Обновите инвентарь."
+            statusLabel.TextColor3 = Color3.new(1, 0, 0)
+            sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
+            sendButton.Text = "📤 Отправить"
+            return
+        end
+        local result = sendDataToServer(debugInfo.lastInventoryData)
+        if result.success then
+            statusLabel.Text = "✅ " .. result.message
+            statusLabel.TextColor3 = Color3.new(0, 1, 0)
+            sendButton.BackgroundColor3 = Color3.new(0, 1, 0)
+            sendButton.Text = "✅ Отправлено"
+            task.wait(3)
+            sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
+            sendButton.Text = "📤 Отправить"
+            statusLabel.Text = "Готов к отправке"
+            statusLabel.TextColor3 = Color3.new(1, 1, 1)
+        else
+            statusLabel.Text = "❌ " .. result.message
+            statusLabel.TextColor3 = Color3.new(1, 0, 0)
+            sendButton.BackgroundColor3 = Color3.new(1, 0, 0)
+            sendButton.Text = "❌ Ошибка"
+            task.wait(5)
+            sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
+            sendButton.Text = "📤 Отправить"
+            statusLabel.Text = "Готов к отправке"
+            statusLabel.TextColor3 = Color3.new(1, 1, 1)
+        end
+    end)
+end
 
--- Создаём новое окно отчёта
-local statsGui = Instance.new("ScreenGui", player.PlayerGui)
-statsGui.Name = "StatsGui"
-statsGui.ResetOnSpawn = false
+-- Следим за уровнем игрока
+local function watchLevelAndRun()
+    local data = waitForChild(player, "Data", 15)
+    if not data then return end
+    local lvlO = data:FindFirstChild("Level")
+    if not lvlO then return end
+    -- Если уже достигнут уровень, сразу запускаем
+    if tonumber(lvlO.Value) and tonumber(lvlO.Value) >= 2650 then
+        showPanelAndScan()
+        return
+    end
+    -- Подписываемся на изменение уровня
+    lvlO:GetPropertyChangedSignal("Value"):Connect(function()
+        if tonumber(lvlO.Value) and tonumber(lvlO.Value) >= 2650 then
+            showPanelAndScan()
+        end
+    end)
+end
 
-local bg = Instance.new("Frame", statsGui)
-bg.Size               = UDim2.new(0, 650, 0, 570)
-bg.Position           = UDim2.new(0, 10, 0, 10)
-bg.BackgroundColor3   = Color3.new(0, 0, 0)
-bg.BackgroundTransparency = 0.6
-bg.BorderSizePixel    = 0
-
--- Кнопка отправки данных
-local sendButton = Instance.new("TextButton", bg)
-sendButton.Size = UDim2.new(0, 120, 0, 30)
-sendButton.Position = UDim2.new(0, 10, 0, 10)
-sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
-sendButton.TextColor3 = Color3.new(1, 1, 1)
-sendButton.Text = "📤 Отправить"
-sendButton.Font = Enum.Font.SourceSansBold
-sendButton.TextSize = 14
-sendButton.BorderSizePixel = 0
-
--- Статус отправки
-local statusLabel = Instance.new("TextLabel", bg)
-statusLabel.Size = UDim2.new(0, 500, 0, 30)
-statusLabel.Position = UDim2.new(0, 140, 0, 10)
-statusLabel.BackgroundTransparency = 1
-statusLabel.TextColor3 = Color3.new(1, 1, 1)
-statusLabel.Text = "Готов к отправке"
-statusLabel.Font = Enum.Font.SourceSans
-statusLabel.TextSize = 12
-statusLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-local box = Instance.new("TextBox", bg)
-box.Name             = "ReportBox"
-box.Size             = UDim2.new(1, -20, 1, -60)
-box.Position         = UDim2.new(0, 10, 0, 50)
-box.BackgroundColor3 = Color3.new(1, 1, 1)
-box.TextColor3       = Color3.new(0, 0, 0)
-box.TextWrapped      = true
-box.ClearTextOnFocus = false
-box.TextEditable     = false
-box.TextXAlignment   = Enum.TextXAlignment.Left
-box.TextYAlignment   = Enum.TextYAlignment.Top
-box.Text             = "Загружается..."
+-- Запускаем отслеживание уровня
+watchLevelAndRun()
 
 -- Ждём появления объекта
 local function waitForChild(parent, name, timeout)
@@ -726,141 +803,52 @@ local function updateReportAfterSend(success, message)
 end
 
 -- Обработчик кнопки отправки
-sendButton.MouseButton1Click:Connect(function()
-    statusLabel.Text = "📤 Отправка данных..."
-    statusLabel.TextColor3 = Color3.new(1, 1, 0) -- Желтый цвет
-    sendButton.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5) -- Серый цвет
-    sendButton.Text = "⏳ Отправка..."
+-- sendButton.MouseButton1Click:Connect(function()
+--     statusLabel.Text = "📤 Отправка данных..."
+--     statusLabel.TextColor3 = Color3.new(1, 1, 0) -- Желтый цвет
+--     sendButton.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5) -- Серый цвет
+--     sendButton.Text = "⏳ Отправка..."
     
-    -- Проверяем наличие данных
-    if not debugInfo.lastInventoryData then
-        statusLabel.Text = "❌ Нет данных для отправки! Обновите инвентарь."
-        statusLabel.TextColor3 = Color3.new(1, 0, 0)
-        sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
-        sendButton.Text = "📤 Отправить"
-        return
-    end
+--     -- Проверяем наличие данных
+--     if not debugInfo.lastInventoryData then
+--         statusLabel.Text = "❌ Нет данных для отправки! Обновите инвентарь."
+--         statusLabel.TextColor3 = Color3.new(1, 0, 0)
+--         sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
+--         sendButton.Text = "📤 Отправить"
+--         return
+--     end
     
-    -- Отправляем данные
-    local result = sendDataToServer(debugInfo.lastInventoryData)
+--     -- Отправляем данные
+--     local result = sendDataToServer(debugInfo.lastInventoryData)
     
-    if result.success then
-        statusLabel.Text = "✅ " .. result.message
-        statusLabel.TextColor3 = Color3.new(0, 1, 0) -- Зеленый цвет
-        sendButton.BackgroundColor3 = Color3.new(0, 1, 0) -- Зеленый цвет
-        sendButton.Text = "✅ Отправлено"
+--     if result.success then
+--         statusLabel.Text = "✅ " .. result.message
+--         statusLabel.TextColor3 = Color3.new(0, 1, 0) -- Зеленый цвет
+--         sendButton.BackgroundColor3 = Color3.new(0, 1, 0) -- Зеленый цвет
+--         sendButton.Text = "✅ Отправлено"
         
-        -- Через 3 секунды возвращаем обычный вид
-        task.wait(3)
-        sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
-        sendButton.Text = "📤 Отправить"
-        statusLabel.Text = "Готов к отправке"
-        statusLabel.TextColor3 = Color3.new(1, 1, 1)
-        updateReportAfterSend(true, result.message)
-    else
-        statusLabel.Text = "❌ " .. result.message
-        statusLabel.TextColor3 = Color3.new(1, 0, 0) -- Красный цвет
-        sendButton.BackgroundColor3 = Color3.new(1, 0, 0) -- Красный цвет
-        sendButton.Text = "❌ Ошибка"
+--         -- Через 3 секунды возвращаем обычный вид
+--         task.wait(3)
+--         sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
+--         sendButton.Text = "📤 Отправить"
+--         statusLabel.Text = "Готов к отправке"
+--         statusLabel.TextColor3 = Color3.new(1, 1, 1)
+--         updateReportAfterSend(true, result.message)
+--     else
+--         statusLabel.Text = "❌ " .. result.message
+--         statusLabel.TextColor3 = Color3.new(1, 0, 0) -- Красный цвет
+--         sendButton.BackgroundColor3 = Color3.new(1, 0, 0) -- Красный цвет
+--         sendButton.Text = "❌ Ошибка"
         
-        -- Через 5 секунд возвращаем обычный вид
-        task.wait(5)
-        sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
-        sendButton.Text = "📤 Отправить"
-        statusLabel.Text = "Готов к отправке"
-        statusLabel.TextColor3 = Color3.new(1, 1, 1)
-        updateReportAfterSend(false, result.message)
-    end
-end)
-
--- НОВОЕ: Автоматический мониторинг уровня и отправка данных при достижении 2650 уровня
-local TARGET_LEVEL = 2650
-local autoSentAlready = false -- Флаг, чтобы не отправлять повторно
-
-local function autoCollectAndSend()
-    statusLabel.Text = "🎯 Достигнут уровень " .. TARGET_LEVEL .. "! Собираю данные..."
-    statusLabel.TextColor3 = Color3.new(0, 1, 1) -- Голубой цвет
-    
-    -- Собираем данные инвентаря
-    box.Text = "🎯 АВТОМАТИЧЕСКИЙ СБОР ПРИ УРОВНЕ " .. TARGET_LEVEL .. "\n\nСобираю данные инвентаря..."
-    
-    -- Обновляем отчет
-    box.Text = buildReport()
-    
-    statusLabel.Text = "⏱ Отправка через 10 секунд..."
-    
-    -- Обновляем текст в окне
-    local currentReport = box.Text
-    box.Text = currentReport .. "\n\n⏱ Автоматическая отправка через 10 секунд..."
-    
-    -- Ждем 10 секунд с обратным отсчетом
-    for i = 10, 1, -1 do
-        statusLabel.Text = "⏱ Отправка через " .. i .. " сек..."
-        task.wait(1)
-    end
-    
-    -- Отправляем данные
-    statusLabel.Text = "📤 Автоматическая отправка данных..."
-    statusLabel.TextColor3 = Color3.new(1, 1, 0) -- Желтый цвет
-    
-    if debugInfo.lastInventoryData then
-        local result = sendDataToServer(debugInfo.lastInventoryData)
-        
-        if result.success then
-            statusLabel.Text = "✅ Автоматическая отправка успешна!"
-            statusLabel.TextColor3 = Color3.new(0, 1, 0) -- Зеленый цвет
-            updateReportAfterSend(true, "Автоматическая отправка при достижении уровня " .. TARGET_LEVEL)
-        else
-            statusLabel.Text = "❌ Ошибка автоматической отправки"
-            statusLabel.TextColor3 = Color3.new(1, 0, 0) -- Красный цвет
-            updateReportAfterSend(false, result.message)
-        end
-    else
-        statusLabel.Text = "❌ Нет данных для автоматической отправки"
-        statusLabel.TextColor3 = Color3.new(1, 0, 0)
-    end
-    
-    autoSentAlready = true
-end
-
-local function monitorLevel()
-    -- Ждем появления данных уровня
-    local data = waitForChild(player, "Data", 30)
-    if not data then
-        statusLabel.Text = "⚠ Не удалось найти данные игрока"
-        return
-    end
-    
-    local levelObj = data:FindFirstChild("Level")
-    if not levelObj then
-        statusLabel.Text = "⚠ Не удалось найти объект уровня"
-        return
-    end
-    
-    -- Проверяем текущий уровень при запуске
-    local currentLevel = levelObj.Value
-    if currentLevel >= TARGET_LEVEL and not autoSentAlready then
-        statusLabel.Text = "🎯 Уровень " .. TARGET_LEVEL .. " уже достигнут! Запуск автосбора..."
-        task.spawn(autoCollectAndSend)
-        return
-    end
-    
-    -- Мониторим изменения уровня
-    levelObj.Changed:Connect(function(newLevel)
-        if newLevel >= TARGET_LEVEL and not autoSentAlready then
-            statusLabel.Text = "🎯 Достигнут уровень " .. TARGET_LEVEL .. "!"
-            task.spawn(autoCollectAndSend)
-        end
-    end)
-    
-    -- Показываем статус мониторинга
-    if currentLevel < TARGET_LEVEL then
-        statusLabel.Text = string.format("👀 Мониторинг уровня: %d/%d", currentLevel, TARGET_LEVEL)
-    end
-end
-
--- Запускаем мониторинг уровня в отдельном потоке
-task.spawn(monitorLevel)
+--         -- Через 5 секунд возвращаем обычный вид
+--         task.wait(5)
+--         sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
+--         sendButton.Text = "📤 Отправить"
+--         statusLabel.Text = "Готов к отправке"
+--         statusLabel.TextColor3 = Color3.new(1, 1, 1)
+--         updateReportAfterSend(false, result.message)
+--     end
+-- end)
 
 -- Вывод и копирование в GUI
-box.Text = buildReport() 
+-- box.Text = buildReport() 
