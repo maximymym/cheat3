@@ -2,10 +2,15 @@
 -- собирает и показывает уровень, стили, мечи, оружие, фрукты, аксессуары и материалы
 -- агрегация одинаковых предметов, вывод в TextBox (Ctrl+A → Ctrl+C)
 -- ДЕБАГ ВЕРСИЯ: поиск категорий в соседних лейблах + детальная отладка
+-- НОВОЕ: отправка данных через HttpGet
 
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService       = game:GetService("HttpService")
 local player            = Players.LocalPlayer
+
+-- Настройки сервера (IP сервера)
+local SERVER_URL = "http://194.59.186.230:3000/api/data"
 
 -- Событие открытия/закрытия инвентаря
 local toggleInv = ReplicatedStorage:WaitForChild("Events"):WaitForChild("ToggleInventoryWindow")
@@ -26,8 +31,66 @@ local debugInfo = {
     notFoundFields = {},
     itemsProcessed = 0,
     categoriesFound = 0,
-    neighborsChecked = 0
+    neighborsChecked = 0,
+    lastSendResult = nil
 }
+
+-- Функция для URL-кодирования
+local function urlEncode(str)
+    if str then
+        str = string.gsub(str, "\n", "\r\n")
+        str = string.gsub(str, "([^%w ])", function(c) 
+            return string.format("%%%02X", string.byte(c)) 
+        end)
+        str = string.gsub(str, " ", "+")
+    end
+    return str
+end
+
+-- Функция для отправки данных на сервер
+local function sendDataToServer(data)
+    local success, result = pcall(function()
+        -- Подготавливаем URL с параметрами
+        local params = {
+            "player=" .. urlEncode(player.Name),
+            "level=" .. urlEncode(tostring(data.level)),
+            "styles=" .. urlEncode(data.styles),
+            "swords=" .. urlEncode(data.swords),
+            "guns=" .. urlEncode(data.guns),
+            "fruits=" .. urlEncode(data.fruits),
+            "accessories=" .. urlEncode(data.accessories),
+            "materials=" .. urlEncode(data.materials)
+        }
+        
+        local url = SERVER_URL .. "?" .. table.concat(params, "&")
+        
+        -- Отправляем GET запрос
+        local response = game:HttpGet(url, true)
+        
+        -- Пытаемся распарсить ответ
+        local responseData = HttpService:JSONDecode(response)
+        
+        return {
+            success = true,
+            message = "Данные отправлены успешно!",
+            serverResponse = responseData,
+            url = url
+        }
+    end)
+    
+    if success then
+        debugInfo.lastSendResult = result
+        return result
+    else
+        local errorResult = {
+            success = false,
+            message = "Ошибка отправки: " .. tostring(result),
+            error = result
+        }
+        debugInfo.lastSendResult = errorResult
+        return errorResult
+    end
+end
 
 -- Удаляем старое окно, если есть
 local old = player.PlayerGui:FindFirstChild("StatsGui")
@@ -39,16 +102,38 @@ statsGui.Name = "StatsGui"
 statsGui.ResetOnSpawn = false
 
 local bg = Instance.new("Frame", statsGui)
-bg.Size               = UDim2.new(0, 600, 0, 500)
+bg.Size               = UDim2.new(0, 650, 0, 570)
 bg.Position           = UDim2.new(0, 10, 0, 10)
 bg.BackgroundColor3   = Color3.new(0, 0, 0)
 bg.BackgroundTransparency = 0.6
 bg.BorderSizePixel    = 0
 
+-- Кнопка отправки данных
+local sendButton = Instance.new("TextButton", bg)
+sendButton.Size = UDim2.new(0, 120, 0, 30)
+sendButton.Position = UDim2.new(0, 10, 0, 10)
+sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
+sendButton.TextColor3 = Color3.new(1, 1, 1)
+sendButton.Text = "📤 Отправить"
+sendButton.Font = Enum.Font.SourceSansBold
+sendButton.TextSize = 14
+sendButton.BorderSizePixel = 0
+
+-- Статус отправки
+local statusLabel = Instance.new("TextLabel", bg)
+statusLabel.Size = UDim2.new(0, 500, 0, 30)
+statusLabel.Position = UDim2.new(0, 140, 0, 10)
+statusLabel.BackgroundTransparency = 1
+statusLabel.TextColor3 = Color3.new(1, 1, 1)
+statusLabel.Text = "Готов к отправке"
+statusLabel.Font = Enum.Font.SourceSans
+statusLabel.TextSize = 12
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+
 local box = Instance.new("TextBox", bg)
 box.Name             = "ReportBox"
-box.Size             = UDim2.new(1, -10, 1, -10)
-box.Position         = UDim2.new(0, 5, 0, 5)
+box.Size             = UDim2.new(1, -20, 1, -60)
+box.Position         = UDim2.new(0, 10, 0, 50)
 box.BackgroundColor3 = Color3.new(1, 1, 1)
 box.TextColor3       = Color3.new(0, 0, 0)
 box.TextWrapped      = true
@@ -451,6 +536,23 @@ local function generateDebugReport()
         ""
     }
     
+    -- Добавляем информацию о последней отправке
+    if debugInfo.lastSendResult then
+        table.insert(debugLines, "=== ПОСЛЕДНЯЯ ОТПРАВКА ===")
+        table.insert(debugLines, string.format("Статус: %s", debugInfo.lastSendResult.success and "✅ УСПЕШНО" or "❌ ОШИБКА"))
+        table.insert(debugLines, string.format("Сообщение: %s", debugInfo.lastSendResult.message))
+        if debugInfo.lastSendResult.url then
+            table.insert(debugLines, string.format("URL: %s", debugInfo.lastSendResult.url))
+        end
+        if debugInfo.lastSendResult.serverResponse then
+            table.insert(debugLines, string.format("Ответ сервера: %s", HttpService:JSONEncode(debugInfo.lastSendResult.serverResponse)))
+        end
+        if debugInfo.lastSendResult.error then
+            table.insert(debugLines, string.format("Ошибка: %s", tostring(debugInfo.lastSendResult.error)))
+        end
+        table.insert(debugLines, "")
+    end
+    
     -- Добавляем информацию о всех найденных категориях
     if debugInfo.allFoundCategories then
         table.insert(debugLines, "=== ВСЕ НАЙДЕННЫЕ КАТЕГОРИИ ===")
@@ -573,12 +675,68 @@ local function buildReport()
         ("🔫 Оружие: %s"):format(#guns>0 and table.concat(guns, ", ") or "нет"),
         ("🍉 Фрукты: %s"):format(#fruits>0 and table.concat(fruits, ", ") or "нет"),
         ("👑 Аксессуары: %s"):format(#accs>0 and table.concat(accs, ", ") or "нет"),
-        ("🛠 Материалы: %s"):format(#mats>0 and table.concat(mats, ", ") or "нет"),
-        "",
-        generateDebugReport()
+        ("🛠 Материалы: %s"):format(#mats>0 and table.concat(mats, ", ") or "нет")
     }
+    
+    -- Сохраняем последние данные для отправки
+    debugInfo.lastInventoryData = {
+        level = lvl,
+        styles = #styles>0 and table.concat(styles, ", ") or "нет",
+        swords = #swords>0 and table.concat(swords, ", ") or "нет",
+        guns = #guns>0 and table.concat(guns, ", ") or "нет",
+        fruits = #fruits>0 and table.concat(fruits, ", ") or "нет",
+        accessories = #accs>0 and table.concat(accs, ", ") or "нет",
+        materials = #mats>0 and table.concat(mats, ", ") or "нет"
+    }
+    
     return table.concat(lines, "\n")
 end
+
+-- Обработчик кнопки отправки
+sendButton.MouseButton1Click:Connect(function()
+    statusLabel.Text = "📤 Отправка данных..."
+    statusLabel.TextColor3 = Color3.new(1, 1, 0) -- Желтый цвет
+    sendButton.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5) -- Серый цвет
+    sendButton.Text = "⏳ Отправка..."
+    
+    -- Проверяем наличие данных
+    if not debugInfo.lastInventoryData then
+        statusLabel.Text = "❌ Нет данных для отправки! Обновите инвентарь."
+        statusLabel.TextColor3 = Color3.new(1, 0, 0)
+        sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
+        sendButton.Text = "📤 Отправить"
+        return
+    end
+    
+    -- Отправляем данные
+    local result = sendDataToServer(debugInfo.lastInventoryData)
+    
+    if result.success then
+        statusLabel.Text = "✅ " .. result.message
+        statusLabel.TextColor3 = Color3.new(0, 1, 0) -- Зеленый цвет
+        sendButton.BackgroundColor3 = Color3.new(0, 1, 0) -- Зеленый цвет
+        sendButton.Text = "✅ Отправлено"
+        
+        -- Через 3 секунды возвращаем обычный вид
+        task.wait(3)
+        sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
+        sendButton.Text = "📤 Отправить"
+        statusLabel.Text = "Готов к отправке"
+        statusLabel.TextColor3 = Color3.new(1, 1, 1)
+    else
+        statusLabel.Text = "❌ " .. result.message
+        statusLabel.TextColor3 = Color3.new(1, 0, 0) -- Красный цвет
+        sendButton.BackgroundColor3 = Color3.new(1, 0, 0) -- Красный цвет
+        sendButton.Text = "❌ Ошибка"
+        
+        -- Через 5 секунд возвращаем обычный вид
+        task.wait(5)
+        sendButton.BackgroundColor3 = Color3.new(0, 0.8, 0)
+        sendButton.Text = "📤 Отправить"
+        statusLabel.Text = "Готов к отправке"
+        statusLabel.TextColor3 = Color3.new(1, 1, 1)
+    end
+end)
 
 -- Вывод и копирование в GUI
 box.Text = buildReport() 
