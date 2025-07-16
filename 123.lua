@@ -92,61 +92,85 @@ local function sendDataToServer(data)
     end
 end
 
--- === ВИЗУАЛЬНЫЙ ИНДИКАТОР ОЖИДАНИЯ ===
-local waitingLabel = nil
-local function showWaitingLabel(levelsLeft)
-    if not waitingLabel then
-        waitingLabel = Instance.new("ScreenGui")
-        waitingLabel.Name = "WaitingLevelGui"
-        waitingLabel.Parent = player:WaitForChild("PlayerGui")
-        waitingLabel.ResetOnSpawn = false
-        waitingLabel.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-        waitingLabel.DisplayOrder = 100
-        local label = Instance.new("TextLabel")
-        label.Name = "WaitingLabel"
-        label.Size = UDim2.new(0, 420, 0, 38)
-        label.Position = UDim2.new(0.5, -210, 0.35, 0)
-        label.BackgroundTransparency = 0.4
-        label.BackgroundColor3 = Color3.new(0, 0, 0)
-        label.TextColor3 = Color3.new(1, 1, 0.5)
-        label.TextStrokeTransparency = 0.7
-        label.Font = Enum.Font.SourceSansBold
-        label.TextSize = 22
-        label.TextXAlignment = Enum.TextXAlignment.Center
-        label.TextYAlignment = Enum.TextYAlignment.Center
-        label.ZIndex = 10
-        label.Parent = waitingLabel
-    end
-    local label = waitingLabel:FindFirstChild("WaitingLabel")
-    if label then
-        if levelsLeft > 0 then
-            label.Text = ("Скрипт активен в фоне. До старта: %d уровней"):format(levelsLeft)
-        else
-            label.Text = "Скрипт активен в фоне. До старта: 0 уровней"
-        end
-    end
+-- === АВТОМАТИЧЕСКИЙ ЗАПУСК ПО ДОСТИЖЕНИЮ 2650 ЛВЛ ===
+local PANEL_SHOWN = false
+
+-- Создаём индикатор уровня
+local function createLevelIndicator()
+    local indicatorGui = Instance.new("ScreenGui", player.PlayerGui)
+    indicatorGui.Name = "LevelIndicatorGui"
+    indicatorGui.ResetOnSpawn = false
+    
+    local indicator = Instance.new("Frame", indicatorGui)
+    indicator.Size = UDim2.new(0, 300, 0, 60)
+    indicator.Position = UDim2.new(1, -320, 0, 10) -- Правый верхний угол
+    indicator.BackgroundColor3 = Color3.new(0, 0, 0)
+    indicator.BackgroundTransparency = 0.3
+    indicator.BorderSizePixel = 0
+    
+    -- Закругляем углы
+    local corner = Instance.new("UICorner", indicator)
+    corner.CornerRadius = UDim.new(0, 8)
+    
+    local titleLabel = Instance.new("TextLabel", indicator)
+    titleLabel.Size = UDim2.new(1, 0, 0, 20)
+    titleLabel.Position = UDim2.new(0, 0, 0, 5)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "🔄 Автоскрипт активен"
+    titleLabel.TextColor3 = Color3.new(0, 1, 0) -- Зеленый
+    titleLabel.Font = Enum.Font.SourceSansBold
+    titleLabel.TextSize = 12
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Center
+    
+    local levelLabel = Instance.new("TextLabel", indicator)
+    levelLabel.Size = UDim2.new(1, 0, 0, 35)
+    levelLabel.Position = UDim2.new(0, 0, 0, 25)
+    levelLabel.BackgroundTransparency = 1
+    levelLabel.Text = "Загрузка..."
+    levelLabel.TextColor3 = Color3.new(1, 1, 1)
+    levelLabel.Font = Enum.Font.SourceSans
+    levelLabel.TextSize = 11
+    levelLabel.TextXAlignment = Enum.TextXAlignment.Center
+    levelLabel.TextWrapped = true
+    
+    return indicatorGui, levelLabel
 end
-local function hideWaitingLabel()
-    if waitingLabel then
-        waitingLabel:Destroy()
-        waitingLabel = nil
+
+-- Обновляем индикатор уровня
+local function updateLevelIndicator(levelLabel, currentLevel)
+    if currentLevel and tonumber(currentLevel) then
+        local level = tonumber(currentLevel)
+        local needed = 2650
+        
+        if level >= needed then
+            levelLabel.Text = string.format("🎯 Уровень: %d\n✅ Запуск скрипта!", level)
+            levelLabel.TextColor3 = Color3.new(0, 1, 0) -- Зеленый
+        else
+            local remaining = needed - level
+            levelLabel.Text = string.format("📊 Уровень: %d / %d\n⏳ Осталось: %d лвл", level, needed, remaining)
+            levelLabel.TextColor3 = Color3.new(1, 1, 0) -- Желтый
+        end
+    else
+        levelLabel.Text = "❌ Не удалось получить уровень"
+        levelLabel.TextColor3 = Color3.new(1, 0, 0) -- Красный
     end
 end
 
--- === АВТОМАТИЧЕСКИЙ ЗАПУСК ПО ДОСТИЖЕНИЮ 2650 ЛВЛ ===
-local PANEL_SHOWN = false
 local function showPanelAndScan()
     if PANEL_SHOWN then return end
     PANEL_SHOWN = true
-    hideWaitingLabel() -- Скрываем индикатор ожидания
+    
+    -- Удаляем индикатор уровня
+    local indicatorGui = player.PlayerGui:FindFirstChild("LevelIndicatorGui")
+    if indicatorGui then indicatorGui:Destroy() end
+    
     -- Удаляем старое окно, если есть
-    local old = game:GetService("CoreGui"):FindFirstChild("StatsGui")
+    local old = player.PlayerGui:FindFirstChild("StatsGui")
     if old then old:Destroy() end
     -- Создаём новое окно отчёта
-    local statsGui = Instance.new("ScreenGui")
+    local statsGui = Instance.new("ScreenGui", player.PlayerGui)
     statsGui.Name = "StatsGui"
     statsGui.ResetOnSpawn = false
-    statsGui.Parent = game:GetService("CoreGui")
     local bg = Instance.new("Frame", statsGui)
     bg.Size               = UDim2.new(0, 650, 0, 570)
     bg.Position           = UDim2.new(0, 10, 0, 10)
@@ -243,26 +267,45 @@ end
 
 -- Следим за уровнем игрока
 local function watchLevelAndRun()
-    print("[DEBUG] watchLevelAndRun стартовал")
     local data = waitForChild(player, "Data", 15)
-    if not data then print("[DEBUG] Data не найден!") return end
+    if not data then 
+        -- Если не удалось получить данные, показываем индикатор с ошибкой
+        local indicatorGui, levelLabel = createLevelIndicator()
+        levelLabel.Text = "❌ Ошибка получения данных"
+        levelLabel.TextColor3 = Color3.new(1, 0, 0)
+        return 
+    end
+    
     local lvlO = data:FindFirstChild("Level")
-    if not lvlO then print("[DEBUG] Level не найден!") return end
-    -- Если уже достигнут уровень, сразу запускаем
+    if not lvlO then 
+        -- Если не удалось найти уровень, показываем индикатор с ошибкой
+        local indicatorGui, levelLabel = createLevelIndicator()
+        levelLabel.Text = "❌ Уровень не найден"
+        levelLabel.TextColor3 = Color3.new(1, 0, 0)
+        return 
+    end
+    
+    -- Создаём индикатор уровня
+    local indicatorGui, levelLabel = createLevelIndicator()
+    
+    -- Обновляем индикатор с текущим уровнем
+    updateLevelIndicator(levelLabel, lvlO.Value)
+    
+    -- Если уже достигнут уровень, сразу запускаем через 2 секунды (чтобы пользователь увидел финальное сообщение)
     if tonumber(lvlO.Value) and tonumber(lvlO.Value) >= 2650 then
+        task.wait(2)
         showPanelAndScan()
         return
     end
-    print(("[DEBUG] Уровень игрока: %s — покажем лейбл ожидания"):format(lvlO.Value))
-    -- Показываем индикатор ожидания
-    showWaitingLabel(2650 - (tonumber(lvlO.Value) or 0))
+    
     -- Подписываемся на изменение уровня
     lvlO:GetPropertyChangedSignal("Value"):Connect(function()
-        local currentLevel = tonumber(lvlO.Value) or 0
-        if currentLevel >= 2650 then
+        updateLevelIndicator(levelLabel, lvlO.Value)
+        
+        if tonumber(lvlO.Value) and tonumber(lvlO.Value) >= 2650 then
+            -- Показываем финальное сообщение на 2 секунды, затем запускаем
+            task.wait(2)
             showPanelAndScan()
-        else
-            showWaitingLabel(2650 - currentLevel)
         end
     end)
 end
