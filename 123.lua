@@ -95,14 +95,17 @@ end
 -- === ВИЗУАЛЬНЫЙ ИНДИКАТОР ОЖИДАНИЯ ===
 local waitingLabel = nil
 local function showWaitingLabel(levelsLeft)
-    if waitingLabel == nil then
+    if not waitingLabel then
         waitingLabel = Instance.new("ScreenGui")
         waitingLabel.Name = "WaitingLevelGui"
-        waitingLabel.Parent = game:GetService("CoreGui")
-        local label = Instance.new("TextLabel", waitingLabel)
+        waitingLabel.Parent = player:WaitForChild("PlayerGui")
+        waitingLabel.ResetOnSpawn = false
+        waitingLabel.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        waitingLabel.DisplayOrder = 100
+        local label = Instance.new("TextLabel")
         label.Name = "WaitingLabel"
         label.Size = UDim2.new(0, 420, 0, 38)
-        label.Position = UDim2.new(0.5, -210, 0.35, 0) -- по центру, чуть выше середины
+        label.Position = UDim2.new(0.5, -210, 0.35, 0)
         label.BackgroundTransparency = 0.4
         label.BackgroundColor3 = Color3.new(0, 0, 0)
         label.TextColor3 = Color3.new(1, 1, 0.5)
@@ -111,11 +114,13 @@ local function showWaitingLabel(levelsLeft)
         label.TextSize = 22
         label.TextXAlignment = Enum.TextXAlignment.Center
         label.TextYAlignment = Enum.TextYAlignment.Center
+        label.ZIndex = 10
+        label.Parent = waitingLabel
     end
     local label = waitingLabel:FindFirstChild("WaitingLabel")
     if label then
         if levelsLeft > 0 then
-            label.Text = string.format("Скрипт активен в фоне. До старта: %d уровней", levelsLeft)
+            label.Text = ("Скрипт активен в фоне. До старта: %d уровней"):format(levelsLeft)
         else
             label.Text = "Скрипт активен в фоне. До старта: 0 уровней"
         end
@@ -238,15 +243,17 @@ end
 
 -- Следим за уровнем игрока
 local function watchLevelAndRun()
+    print("[DEBUG] watchLevelAndRun стартовал")
     local data = waitForChild(player, "Data", 15)
-    if not data then return end
+    if not data then print("[DEBUG] Data не найден!") return end
     local lvlO = data:FindFirstChild("Level")
-    if not lvlO then return end
+    if not lvlO then print("[DEBUG] Level не найден!") return end
     -- Если уже достигнут уровень, сразу запускаем
     if tonumber(lvlO.Value) and tonumber(lvlO.Value) >= 2650 then
         showPanelAndScan()
         return
     end
+    print(("[DEBUG] Уровень игрока: %s — покажем лейбл ожидания"):format(lvlO.Value))
     -- Показываем индикатор ожидания
     showWaitingLabel(2650 - (tonumber(lvlO.Value) or 0))
     -- Подписываемся на изменение уровня
