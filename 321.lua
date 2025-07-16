@@ -23,7 +23,7 @@ local function createLevelIndicator()
     
     local indicator = Instance.new("Frame", indicatorGui)
     indicator.Size = UDim2.new(0, 300, 0, 60)
-    indicator.Position = UDim2.new(0.5, -150, 0.5, -30) -- Центр экрана
+    indicator.Position = UDim2.new(0.5, -150, 0.33, -30) -- 1/3 экрана от верха
     indicator.BackgroundColor3 = Color3.new(0, 0, 0)
     indicator.BackgroundTransparency = 0.3
     indicator.BorderSizePixel = 0
@@ -39,7 +39,7 @@ local function createLevelIndicator()
     titleLabel.Text = "🔄 Автоскрипт активен"
     titleLabel.TextColor3 = Color3.new(0, 1, 0) -- Зеленый
     titleLabel.Font = Enum.Font.SourceSansBold
-    titleLabel.TextSize = 12
+    titleLabel.TextSize = 24 -- Увеличено в 2 раза (было 12)
     titleLabel.TextXAlignment = Enum.TextXAlignment.Center
     
     local levelLabel = Instance.new("TextLabel", indicator)
@@ -49,7 +49,7 @@ local function createLevelIndicator()
     levelLabel.Text = "Загрузка..."
     levelLabel.TextColor3 = Color3.new(1, 1, 1)
     levelLabel.Font = Enum.Font.SourceSans
-    levelLabel.TextSize = 11
+    levelLabel.TextSize = 22 -- Увеличено в 2 раза (было 11)
     levelLabel.TextXAlignment = Enum.TextXAlignment.Center
     levelLabel.TextWrapped = true
     
@@ -259,7 +259,7 @@ task.spawn(function()
     
     local testFrame = Instance.new("Frame", testGui)
     testFrame.Size = UDim2.new(0, 200, 0, 50)
-    testFrame.Position = UDim2.new(0.5, -100, 0.5, -25) -- Центр экрана
+    testFrame.Position = UDim2.new(0.5, -100, 0.33, -25) -- 1/3 экрана от верха
     testFrame.BackgroundColor3 = Color3.new(1, 0, 0) -- Красный фон
     testFrame.BorderSizePixel = 0
     
@@ -270,7 +270,7 @@ task.spawn(function()
     testLabel.Text = "🔧 ТЕСТ: Скрипт работает!"
     testLabel.TextColor3 = Color3.new(1, 1, 1)
     testLabel.Font = Enum.Font.SourceSansBold
-    testLabel.TextSize = 10
+    testLabel.TextSize = 20 -- Увеличено в 2 раза (было 10)
     testLabel.TextXAlignment = Enum.TextXAlignment.Center
     
     -- Удаляем тестовый индикатор через 5 секунд
